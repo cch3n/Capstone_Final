@@ -1,0 +1,144 @@
+---
+title: "Abstract:Predicting Whether or Not an Employee Will Quit"
+output:
+  pdf_document: default
+  html_document: default
+---
+ 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+#Load in all libraries
+library(car)
+library(ggplot2)
+library(caTools)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(caret)
+library(ROCR)
+library(gridExtra)
+library(dplyr)
+```
+
+```{r, echo=FALSE, include=FALSE}
+#Add data set to workspace and name it hr_stat. Check data. 
+hr_stat <- read.csv("HR_comma_sep.csv")
+summary(hr_stat)
+
+#Check for missing values.
+summary(is.na(hr_stat))
+
+#Rename variable names to be clean and clear. 
+hr_stat <- hr_stat %>%
+  rename(Satisfaction = satisfaction_level) %>%
+  rename(Evaluation = last_evaluation) %>%
+  rename(NumberProjects = number_project) %>%
+  rename(AvgMonthlyHours = average_montly_hours) %>%
+  rename(YearsWithCompany = time_spend_company) %>%
+  rename(WorkAccident = Work_accident) %>%
+  rename(Quit = left) %>%
+  rename(Promotion = promotion_last_5years) %>%
+  rename(Department = sales) %>%
+  rename(Salary = salary)
+
+#Change "Quit", "WorkAccident" and "Promotion" to a factor of 0 and 1, 1 being Yes 0 being No. 
+hr_stat$Quit <- factor(hr_stat$Quit)
+hr_stat$Promotion <- factor(hr_stat$Promotion)
+hr_stat$WorkAccident <- factor(hr_stat$WorkAccident)
+
+#Change salary to ordered()
+hr_stat$Salary <- ordered(hr_stat$Salary, c("low","medium","high"))
+
+#Check data set for final tweaks. 
+str(hr_stat)
+        
+```
+
+
+Can companies forsee when valuable employees will quit their jobs based off of data collected through the human resources department? Based off of our analysis using logistic regression, character and regression trees and random forest models we were able to predict with over 95% accuracy whether or not an employee will quit their job. The factors that were significant in our models were satisfaction, evaluation, number of projects, average monthly hours and lastly years hired.
+
+```{r echo=FALSE, warning=FALSE}
+
+a <- ggplot(hr_stat, aes(Satisfaction, fill = Quit, colour = Quit)) + 
+  geom_density(position = "identity", binwidth = 0.01, alpha = 0.6) +
+  ggtitle("Satisfaction Ratings Density Plot") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        legend.position = "none", axis.title = element_text(size = 10)) +
+  scale_x_continuous(breaks = seq(0,1,0.1)) +
+  scale_fill_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) +
+  scale_color_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit"))
+
+b <- ggplot(hr_stat, aes(Evaluation, fill = Quit, colour = Quit)) + 
+  geom_density(position = "identity", binwidth = 0.01, alpha = 0.6) + 
+  ggtitle("Last Evaluation Density Plot") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        legend.position = "none", axis.title = element_text(size = 10)) +
+  scale_x_continuous(breaks = seq(0, 1, 0.1)) +
+  scale_fill_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) +
+  scale_color_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit"))
+
+position <- data.frame(pos = c(.80, .07, .80, .07, .80, .07, .80, .07, .80, .07, .07))
+testing <- data.frame(projects = hr_stat[,3], Quit = hr_stat[,7])
+testingproject <- testing %>%
+  group_by(projects, Quit) %>%
+  summarise(count = n()) %>%
+  mutate(pct = count/sum(count)) %>% 
+  mutate(pcttot = count/14999*100) 
+testingproject$pcttot <- round(testingproject$pcttot, digits = 2)
+
+c <- ggplot(testingproject, aes(projects, pct, colour = Quit, fill = Quit)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  ggtitle("Number of Projects") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        panel.grid.major.y = element_line(colour = "grey80"),
+        legend.position = "none", axis.title = element_text(size = 10)) +
+  scale_x_continuous(breaks = seq(2, 7, 1)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.25), labels = scales::percent) +
+  labs(y = "Relative Percentage", x = "Number of Projects") + 
+  scale_fill_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) +
+  scale_color_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) 
+
+d <- ggplot(hr_stat, aes(AvgMonthlyHours, fill = Quit, colour = Quit)) +
+  geom_density(position = "identity", binwidth = 1, alpha = 0.6) +
+  ggtitle("Average Monthly Hours Density Plot") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        legend.position = "none", axis.title = element_text(size = 10)) +
+  scale_fill_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) +
+  scale_color_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit"))
+
+Years <- data.frame(pos = c(.80, .07, .80, .07, .80, .07, .80, .07, .80, .07, .8, .8, .8))
+testing <- data.frame(years = hr_stat[,5], Quit = hr_stat[,7])
+testingyears <- testing %>%
+  group_by(years, Quit) %>%
+  summarise(count = n()) %>%
+  mutate(pct = count/sum(count)) %>% 
+  mutate(pcttot = count/14999*100) 
+testingyears$pcttot <- round(testingyears$pcttot, digits = 2)
+
+e <- ggplot(testingyears, aes(years, pct, colour = Quit, fill = Quit)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  ggtitle("Years in Company") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        panel.grid.major.y = element_line(colour = "grey80"),
+        legend.position = "right", axis.title = element_text(size = 10),
+        legend.text = element_text(size = 7),
+        legend.title = element_text(size = 8)) +
+  scale_x_continuous(breaks = seq(1, 10, 1)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.25), labels = scales::percent) +
+  labs(y = "Relative Percentage", x = "Years") + 
+  scale_fill_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) +
+  scale_color_discrete(name = "Stay/Quit", labels = c("0" = "Stay", "1" = "Quit")) 
+grid.arrange(a,b,c,d,e, ncol = 2)
+```
+
+The company shows a few patterns in its data. 
+
+* Employee satisfaction levels of 0.3-0.5 were more likely to quit.
+* Employee evaluations of 0.6 and under or 0.8 and above were more likely to quit. 
+* Employees who handled 2 projects and 6+ projects were more likely to quit. 
+* Employees who were overworked or underworked were more likely to quit. 
+* Employees between 2-6 years were more likely to quit. 
+
+To help make a more resilient model we recommend that more data variables be collected, for example annual salary amounts and extraneous factors like health or personal reasons. Lastly, employers should use the model to predict which of their employees are high risk candidates to quit. Then depending on the employee's level of importance make the next move to negotiate new contracts or hire replacements. 
