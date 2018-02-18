@@ -3,7 +3,7 @@ The materials in this repository were created for the Springboard course, Introd
 Output included:
   * Abstract: A summary of findings from our analysis.
   * Slide Deck: A generalized step by step of our analysis.
-  * Final PDF: A detailed write up of our analysis. 
+  * Report PDF: A detailed write up of our analysis. 
 # Capstone Project: Predicting If an Employee Will Quit
 The project examines whether or not employees will quit their jobs based off of data collected by the HR department. 
 # Data Set
